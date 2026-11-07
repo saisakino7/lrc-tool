@@ -82,7 +82,23 @@ button{cursor:pointer}
 .edit label{display:flex;align-items:center;gap:7px;margin:0 2px 6px;font-size:13px;color:var(--text-2)}
 .edit label i{width:8px;height:8px;border-radius:50%;background:var(--c)}
 textarea{display:block;width:100%;min-height:96px;max-height:40vh;padding:12px 14px;border:1.5px solid var(--c,var(--border-2));border-radius:16px;background:var(--surface);font:19px/1.55 var(--font);outline:none;resize:none}
-textarea.my{font-family:var(--font-my);font-size:20px}
+textarea.my{font-family:var(--font-my);font-size:22px;line-height:1.95;padding-top:10px;padding-bottom:10px}
+/* 缅文/掸文：逐字编辑条 */
+.tools{display:flex;gap:6px;margin-top:8px}
+.tool{flex:1;height:42px;min-width:0;padding:0 6px;border:1px solid var(--border);border-radius:11px;background:var(--surface);font-size:14px;color:var(--text);white-space:nowrap}
+.tool:active{background:var(--surface-3)}
+.tool.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:650}
+.tool.fix{border-color:var(--warn);background:var(--warn-soft);color:var(--warn);font-weight:650}
+.glyphs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 0;margin-top:8px;padding:8px 6px;min-height:58px;border:1px dashed var(--border-2);border-radius:14px;background:var(--surface-2);user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.glyphs .g{display:inline-grid;place-items:center;min-width:34px;height:46px;padding:0 5px;margin:0 2px;border-radius:9px;background:var(--surface);border:1px solid var(--border);font:22px/1 var(--font-my)}
+.glyphs .g.sp{min-width:22px;color:var(--text-3);font:13px/1 var(--font)}
+.glyphs .g.mk{color:var(--accent)}
+.glyphs .g.sel{background:var(--accent-soft);border-color:var(--accent)}
+.glyphs .g.anchor{box-shadow:0 0 0 2px var(--accent)}
+.glyphs .caret{display:inline-block;width:3px;height:40px;margin:0 1px;border-radius:2px;background:var(--accent);animation:blink 1s steps(1) infinite}
+.glyphs .empty{color:var(--text-3);font-size:13px;padding:0 6px}
+@keyframes blink{50%{opacity:.25}}
+.warn{margin-top:8px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--text);font-size:13.5px;line-height:1.6}
 textarea:focus{box-shadow:0 0 0 4px color-mix(in srgb,var(--c,var(--accent)) 22%,transparent)}
 textarea:disabled{opacity:.5}
 
@@ -132,7 +148,19 @@ textarea:disabled{opacity:.5}
 
   <div class="edit" id="edit">
     <label for="ta"><i></i><span id="taLabel">输入</span></label>
-    <textarea id="ta" rows="2" enterkeyhint="next" autocomplete="off" spellcheck="false" disabled placeholder="等待电脑…"></textarea>
+    <textarea id="ta" rows="2" enterkeyhint="next" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" disabled placeholder="等待电脑…"></textarea>
+    <div id="myTools" hidden>
+      <div class="tools">
+        <button class="tool" data-k="left" title="光标左移一个字">◀</button>
+        <button class="tool" data-k="right" title="光标右移一个字">▶</button>
+        <button class="tool" data-k="bs" title="删除光标前的一个字（整个字一起删，不会留下零散的符号）">⌫ 删一字</button>
+        <button class="tool" id="btnSelMode" title="点两个字，选中它们之间的内容">选择</button>
+        <button class="tool" id="btnFine" title="把字拆成单个字母和符号，可以单独修改一个符号">拆开</button>
+      </div>
+      <div class="glyphs" id="glyphs"></div>
+      <button class="tool fix" id="btnFix" style="width:100%;margin-top:8px" hidden>🔧 修正顺序（有字显示成 ◌ 或乱码）</button>
+      <div class="warn" id="encWarn" hidden></div>
+    </div>
   </div>
 
   <div class="acts">
@@ -145,7 +173,7 @@ textarea:disabled{opacity:.5}
     <button class="act" id="btnRedo">↷ 重做</button>
     <button class="act" id="btnUnpair">换配对码</button>
   </div>
-  <p class="hint">键盘上的 next / return 键 = 下一行。用键盘上的 🎤 听写也可以直接输入。播放的是电脑上的音频。</p>
+  <p class="hint">缅文、掸文：输入框下面的「字块」可以直接点——点在字的左半边 / 右半边，光标就放到那里；「选择」后点两个字可以选中一段；「拆开」可以单独改一个符号。<br>键盘上的 next / return 键 = 下一行。用键盘上的 🎤 听写也可以直接输入。播放的是电脑上的音频。</p>
 </section>
 
 </div>
@@ -217,11 +245,11 @@ function onData(d){
 function renderState(d){
   S.state=d;const key=d.id+'|'+d.col,cur=d.cols.find(c=>c.key===d.col)||{label:d.col};
   const atEnd=ta.selectionStart===ta.value.length;
-  if(key!==S.cell){S.cell=key;ta.value=d.value||'';moveCaretEnd();}
-  // 只有手机这边的输入都被电脑收到后，才接受电脑那边的内容（避免打字时被旧内容盖掉）
-  else if(d.ack>=S.seq&&!S.composing&&ta.value!==(d.value||'')){ta.value=d.value||'';if(atEnd)moveCaretEnd();}
+  if(key!==S.cell){S.cell=key;ta.value=d.value||'';moveCaretEnd();selAnchor=null;}
+  // 只有手机这边的输入都被电脑收到后，才接受电脑那边的内容（避免打字时被旧内容盖掉）；光标留在原来的位置
+  else if(d.ack>=S.seq&&!S.composing&&ta.value!==(d.value||'')){const a=ta.selectionStart,b=ta.selectionEnd;ta.value=d.value||'';if(atEnd)moveCaretEnd();else{const L=ta.value.length;try{ta.setSelectionRange(Math.min(a,L),Math.min(b,L));}catch(_){}}}
   ta.disabled=!(S.conn&&S.conn.open);
-  ta.classList.toggle('my',!!cur.my);
+  ta.classList.toggle('my',!!cur.my);S.my=!!cur.my;S.lang=cur.lang||'';$('myTools').hidden=!cur.my;
   const color=COLORS[d.col]||'var(--accent)';$('edit').style.setProperty('--c',color);
   $('taLabel').textContent=cur.label+(cur.lang?` · ${cur.lang}`:'');
   ta.placeholder=`输入${cur.label}…`;
@@ -233,7 +261,7 @@ function renderState(d){
   $('mainRef').innerHTML=(d.refs&&d.refs.length?d.refs:[]).map(r=>`<div class="${r.my?'my':''}"><small>${esc(r.label)}</small>${r.text?esc(r.text):'<span class="empty">（空）</span>'}</div>`).join('')||'<div class="empty">正在编辑原文</div>';
   document.querySelectorAll('[data-nav=prev]').forEach(b=>b.disabled=d.i<=0);
   $('btnPlay').disabled=!d.audio;
-  autosize();
+  autosize();renderGlyphs();
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function moveCaretEnd(){const L=ta.value.length;try{ta.setSelectionRange(L,L);}catch(_){}}
@@ -242,8 +270,10 @@ function autosize(){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHei
 /* ---------- 输入 ---------- */
 function sendValue(){
   if(!S.state)return;
-  const v=ta.value.replace(/\r?\n/g,' ');if(v!==ta.value){ta.value=v;moveCaretEnd();}
-  S.seq++;send({t:'input',seq:S.seq,id:S.state.id,col:S.state.col,value:v});autosize();
+  let v=ta.value.replace(/\r?\n/g,' ');if(v!==ta.value){ta.value=v;moveCaretEnd();}
+  // 缅文/掸文：自动修正“ေ 打在辅音前面”等顺序问题（长度不变，光标位置不变）
+  if(S.my&&autoFix){const f=fixOrder(v);if(f!==v){const a=ta.selectionStart,b=ta.selectionEnd;ta.value=v=f;try{ta.setSelectionRange(a,b);}catch(_){}}}
+  S.seq++;send({t:'input',seq:S.seq,id:S.state.id,col:S.state.col,value:v});autosize();renderGlyphs();
 }
 ta.addEventListener('compositionstart',()=>{S.composing=true;});
 ta.addEventListener('compositionend',()=>{S.composing=false;sendValue();});
@@ -253,7 +283,7 @@ ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&e.keyCode!
 function nav(dir){if(S.composing){S.composing=false;sendValue();}send({t:'nav',dir});}
 
 // 按按钮时不让输入框失去焦点，键盘就不会收起
-document.querySelectorAll('.acts .act,.cols').forEach(b=>b.addEventListener('pointerdown',e=>{if(document.activeElement===ta)e.preventDefault();}));
+document.querySelectorAll('.acts .act,.cols,.tools .tool,#glyphs,#btnFix').forEach(b=>b.addEventListener('pointerdown',e=>{if(document.activeElement===ta)e.preventDefault();}));
 document.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.nav)));
 $('cols').addEventListener('click',e=>{const b=e.target.closest('[data-col]');if(b)send({t:'col',key:b.dataset.col});});
 $('btnPlay').onclick=()=>send({t:'play'});
@@ -266,6 +296,120 @@ $('btnUnpair').onclick=()=>{
   showPair();
 };
 if(window.visualViewport)visualViewport.addEventListener('resize',()=>{if(document.activeElement===ta)$('edit').scrollIntoView({block:'nearest'});});
+
+/* ---------- 缅文 / 掸文 输入辅助 ----------
+   缅文一个“字”= 辅音 + 后面附着的符号（ျ ြ ွ ှ ေ ိ ု ာ ် ့ း …），手机的光标和选择是按整个字移动的，
+   所以很难点到想要的位置。下面的「字块」条把每个字摆成一个块：点块的左/右半边就把光标放到那里。 */
+let fine=false,selMode=false,selAnchor=null,autoFix=true;
+const isMark=c=>/\p{M}/u.test(c);
+// 当前文字切成单元：普通模式 = 一个字一块；拆开模式 = 一个字母/符号一块
+function units(v){
+  const out=[];let pos=0;const cs=Array.from(v);
+  if(fine){for(const ch of cs){out.push({t:ch,a:pos,b:pos+ch.length});pos+=ch.length;}return out;}
+  // 一个“字”= 一个辅音 + 后面所有附着符号（含叠字 ္+辅音、kinzi 辅音+်+္）
+  for(let i=0;i<cs.length;){
+    let t=cs[i++];
+    if(/[က-႟ꩠ-ꩿꧠ-꧿]/.test(t)&&!/\p{M}/u.test(t)){
+      while(i<cs.length){
+        if(cs[i]==='္'&&i+1<cs.length){t+=cs[i]+cs[i+1];i+=2;continue;}
+        if(cs[i]==='်'&&cs[i+1]==='္'&&i+2<cs.length){t+=cs[i]+cs[i+1]+cs[i+2];i+=3;continue;}
+        if(/\p{M}/u.test(cs[i])){t+=cs[i++];continue;}
+        break;
+      }
+    }else{while(i<cs.length&&/\p{M}/u.test(cs[i]))t+=cs[i++];}
+    out.push({t,a:pos,b:pos+t.length});pos+=t.length;
+  }
+  return out;
+}
+function renderGlyphs(){
+  if(!S.my){return;}
+  const box=$('glyphs'),v=ta.value,us=units(v),a=ta.selectionStart,b=ta.selectionEnd;
+  if(!us.length){box.innerHTML='<span class="empty">打字后，这里会把每个字摆成一块，点它就能精确放光标</span>';updateFix();return;}
+  let h='';const caretAt=a===b?a:-1;
+  us.forEach((u,k)=>{
+    if(caretAt===u.a)h+='<i class="caret"></i>';
+    const sp=/^\s+$/.test(u.t),mk=fine&&isMark(u.t),selc=a!==b&&u.a>=a&&u.b<=b;
+    h+=`<span class="g${sp?' sp':''}${mk?' mk':''}${selc?' sel':''}${selAnchor===u.a?' anchor':''}" data-k="${k}">${sp?'␣':esc(mk?'◌'+u.t:u.t)}</span>`;
+  });
+  if(caretAt===v.length)h+='<i class="caret"></i>';
+  box.innerHTML=h;updateFix();
+}
+function setCaret(a,b=a){try{ta.focus({preventScroll:true});ta.setSelectionRange(a,b);}catch(_){}renderGlyphs();}
+$('glyphs').addEventListener('click',e=>{
+  const el=e.target.closest('.g');if(!el)return;const us=units(ta.value),u=us[+el.dataset.k];if(!u)return;
+  const r=el.getBoundingClientRect(),right=e.clientX>r.left+r.width/2;
+  if(selMode){
+    if(selAnchor==null){selAnchor=u.a;setCaret(u.a,u.b);toast('再点另一个字，选中中间这一段');return;}
+    const s0=Math.min(selAnchor,u.a),e0=Math.max(us.find(x=>x.a===selAnchor)?.b??selAnchor,u.b);selAnchor=null;setCaret(s0,e0);toast('已选中，直接打字就会替换这一段');return;
+  }
+  setCaret(right?u.b:u.a);
+});
+function moveUnit(dir){
+  const us=units(ta.value),a=ta.selectionStart,b=ta.selectionEnd;
+  if(a!==b){setCaret(dir<0?a:b);return;}
+  if(dir<0){const u=[...us].reverse().find(x=>x.b<=a&&x.a<a);setCaret(u?u.a:0);}
+  else{const u=us.find(x=>x.a>=a);setCaret(u?u.b:ta.value.length);}
+}
+function delUnit(){
+  const v=ta.value,a=ta.selectionStart,b=ta.selectionEnd;
+  if(a!==b){ta.value=v.slice(0,a)+v.slice(b);setCaret(a);sendValue();return;}
+  const u=[...units(v)].reverse().find(x=>x.b<=a&&x.a<a);if(!u)return;
+  ta.value=v.slice(0,u.a)+v.slice(a);setCaret(u.a);sendValue();
+}
+document.querySelectorAll('.tools [data-k]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.k;if(k==='left')moveUnit(-1);else if(k==='right')moveUnit(1);else delUnit();}));
+$('btnSelMode').onclick=()=>{selMode=!selMode;selAnchor=null;$('btnSelMode').classList.toggle('on',selMode);toast(selMode?'选择：先点开始的字，再点结束的字':'已退出选择');renderGlyphs();};
+$('btnFine').onclick=()=>{fine=!fine;$('btnFine').classList.toggle('on',fine);$('btnFine').textContent=fine?'合并':'拆开';toast(fine?'已拆开：每个字母/符号一块，可以单独删改':'已合并回整字');renderGlyphs();};
+document.addEventListener('selectionchange',()=>{if(document.activeElement===ta&&S.my)renderGlyphs();});
+ta.addEventListener('keyup',()=>{if(S.my)renderGlyphs();});
+
+// 顺序修正：Unicode 缅文/掸文规定的存储顺序是“辅音 → 叠字 → ျ ြ ွ ှ → ေ → 上元音 → 下元音 → ာ → ံ → ့ → ် → း/声调”。
+// 顺序错了（比如先打了 ေ 再打辅音）字体就排不出来，显示成 ◌ 或乱码。
+const RANK={'ျ':2,'ြ':3,'ွ':4,'ႂ':4.5,'ှ':5,'ေ':6,'ႄ':6,'ိ':7,'ီ':7,'ဲ':7,'ဳ':7,'ဴ':7,'ဵ':7,'ႅ':7,'ႆ':7,'ု':8,'ူ':8,'ါ':9,'ာ':9,'ႃ':9,'ံ':10,'့':11,'်':12,'း':13,'ႇ':13,'ႈ':13,'ႉ':13,'ႊ':13,'ႋ':13,'ႌ':13,'ႍ':13,'ႏ':13,'ႚ':13,'ႛ':13,'ႜ':13};
+const isMyBase=c=>/[က-႟ꩠ-ꩿꧠ-꧿]/.test(c)&&!/\p{M}/u.test(c)&&!/[၀-၉၊-၏႐-႙]/.test(c);
+const isPreE=c=>c==='ေ'||c==='ႄ';
+function fixOrder(v){
+  const cs=Array.from(v);let changed=false;
+  // 1) ေ / ႄ 打在辅音前面：挪到后面那个辅音之后
+  for(let i=0;i<cs.length-1;i++){
+    if(!isPreE(cs[i]))continue;const prev=cs[i-1];
+    const startOfSyl=i===0||/[\s၊။.,!?]/.test(prev)||!/[က-႟]/.test(prev)||prev==='်'||prev==='း'||isPreE(prev);
+    if(startOfSyl&&isMyBase(cs[i+1])&&!(cs[i+2]==='်'&&cs[i+3]==='္')){const e=cs[i];cs[i]=cs[i+1];cs[i+1]=e;changed=true;i++;}
+  }
+  // 2) 同一个字里只修几种常见的错序（不做全面排序，避免改坏 ကျွန်ုပ် 这类合法写法）：
+  //    ・中间符号 ျ ြ ွ ှ ႂ 的先后；・ေ 打在了元音后面；・် 和 ့ 的先后（应为 ့်）
+  const MED={'ျ':1,'ြ':2,'ွ':3,'ႂ':3.5,'ှ':4};
+  const out=[];let i=0;
+  while(i<cs.length){
+    out.push(cs[i]);if(!isMyBase(cs[i])){i++;continue;}i++;
+    const marks=[];
+    while(i<cs.length){
+      if(cs[i]==='္'&&i+1<cs.length){marks.push(cs[i]+cs[i+1]);i+=2;continue;}
+      if(/\p{M}/u.test(cs[i])){marks.push(cs[i]);i++;continue;}
+      break;
+    }
+    const orig=marks.join('');
+    if(orig.includes('\u1039')){out.push(orig);continue;} // 叠字 / kinzi（如 မင်္ဂလာ）保持原样
+    // 中间符号排序（它们应该紧跟辅音/叠字之后）
+    const meds=marks.filter(m=>MED[m]!=null).sort((x,y)=>MED[x]-MED[y]),stacks=marks.filter(m=>m.length>1),others=marks.filter(m=>MED[m]==null&&m.length===1);
+    // ေ 应排在中间符号之后、其他元音之前
+    const es=others.filter(isPreE),rest=others.filter(m=>!isPreE(m));
+    let tail=rest.join('').replace(/့်/g,'့်');
+    const fixed=stacks.join('')+meds.join('')+es.join('')+tail;
+    // 只有在原来确实是“错序”时才替换（原文里中间符号/ေ 已经在前面的情况保持不动）
+    if(fixed!==orig&&Array.from(fixed).length===Array.from(orig).length){out.push(fixed);changed=true;}else out.push(orig);
+  }
+  return changed?out.join(''):v;
+}
+// 旧式 Zawgyi 编码的粗略识别（只对缅甸文栏）：Zawgyi 把很多叠字/变体放在 U+1060–U+1097，标准缅文里很少用到
+// Zawgyi 特征：U+1060–U+1097 的变体字，或把 ္ 当作 ် 用（后面不跟辅音）
+function looksZawgyi(v){return /缅/.test(S.lang)&&(/[\u1060-\u1097]/.test(v)||/\u1039(?![\u1000-\u1021])/.test(v));}
+function updateFix(){
+  if(!S.my){$('btnFix').hidden=true;$('encWarn').hidden=true;return;}
+  const v=ta.value;$('btnFix').hidden=fixOrder(v)===v;
+  const z=looksZawgyi(v);$('encWarn').hidden=!z;
+  if(z)$('encWarn').textContent='这段文字看起来是旧式 Zawgyi 编码（手机装的是 Zawgyi 缅文键盘）。电脑和 YouTube 用的是标准 Unicode，会显示成乱码。请把手机键盘换成 Unicode 缅文键盘（iPhone：设置 › 通用 › 键盘 › 添加「缅甸语」），再重新输入这一句。';
+}
+$('btnFix').onclick=()=>{const v=ta.value,f=fixOrder(v);if(f===v)return;const a=ta.selectionStart;ta.value=f;setCaret(Math.min(a,f.length));sendValue();toast('已修正缅文顺序');};
 
 /* ---------- 配对 ---------- */
 function showPair(){$('workView').hidden=true;$('pairView').hidden=false;const c=$('codeInput');c.value='';setTimeout(()=>c.focus(),50);}
